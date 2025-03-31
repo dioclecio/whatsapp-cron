@@ -22,7 +22,7 @@ services:
     environment:
       - SE_NODE_SESSION_TIMEOUT=999999999
   whatsapp:
-    image: https://quay.io/repository/dioclecio/whatsapp-cron:latest
+    image: https://quay.io/dioclecio/whatsapp-cron:latest
     volumes:
       - ./data:/app/data:rw
     networks:

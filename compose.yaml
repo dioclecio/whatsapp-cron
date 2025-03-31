@@ -28,4 +28,7 @@ services:
     networks:
       - web
     environment:
-      - SELENIUM_HUB=browser:4444
+      - "SELENIUM_HUB=browser:4444"
+      - "TZ=America/Sao_Paulo"
+    security_opt:
+      - "label=disable"

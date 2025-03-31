@@ -20,7 +20,7 @@ RUN go build main.go
 FROM alpine:latest
 
 # Install Chromium and ChromeDriver
-RUN apk update && apk add chromium chromium-chromedriver curl
+RUN apk update && apk add chromium chromium-chromedriver curl tzdata
 
 # Set the working directory
 WORKDIR /app

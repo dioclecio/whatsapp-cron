@@ -1,0 +1,71 @@
+{
+  "mensagens": [
+    {
+      "id": 1,
+      "destinatario": "Dioclecio Camelo",
+      "conteudos": [
+        "Mensagem 1 para o contato",
+        "Mensagem 2 para o contato",
+        "Outra mensagem para o contato"
+      ],
+      "ultimo_envio": "2025-03-30T22:03:08-03:00",
+      "horario_envio": "06:50",
+      "dia_semana": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ]
+    },
+    {
+      
+      "id": 2,
+      "destinatario": "Dioclecio Camelo",
+      "conteudos": [
+        "Mensagem 1 para o contato",
+        "Mensagem 2 para o contato",
+        "Outra mensagem para o contato"
+      ],
+      "ultimo_envio": "2025-03-30T22:04:20-03:00",
+      "horario_envio": "22:04",
+      "dia_semana": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ]
+    },
+    {
+      "id": 3,
+      "destinatario": "Dioclecio Camelo",
+      "conteudos": [
+        "Mensagem 1 \n para o contato",
+        "Mensagem 2 \n para o contato",
+        "Outra mensagem \n para o contato"
+      ],
+      "ultimo_envio": "2025-03-30T22:36:13-03:00",
+      "horario_envio": "22:36",
+      "dia_semana": [
+        0,
+        6
+      ]
+    },
+    {
+      "id": 4,
+      "destinatario": "Dioclecio Camelo",
+      "conteudos": [
+        "Mensagem 1 para o contato",
+        "Mensagem 2 para o contato",
+        "Outra mensagem para o contato"
+      ],
+      "ultimo_envio": "2025-03-30T22:37:24-03:00",
+      "horario_envio": "22:37",
+      "dia_semana": [
+        0,
+        6
+      ]
+    }
+  ]
+}

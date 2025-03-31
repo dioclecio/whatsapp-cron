@@ -1,0 +1,31 @@
+networks:
+    web:
+
+volumes:
+  browser-profile:
+
+services:
+  browser:
+    image: docker.io/selenium/standalone-chromium
+    networks:
+      - web
+    # shm_size: 2g
+    ports:
+      - "4444:4444"
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - browser-profile:/tmp/chrome_profiles
+    networks:
+      - web
+    environment:
+      - SE_NODE_SESSION_TIMEOUT=999999999
+  whatsapp:
+    image: whatsapp-cron:latest
+    volumes:
+      - ./data:/app/data:rw
+    networks:
+      - web
+    environment:
+      - SELENIUM_HUB=browser:4444

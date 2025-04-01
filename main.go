@@ -9,6 +9,10 @@ import (
 	"time"
 	"math/rand"
 	"github.com/tebeka/selenium"
+	"unicode/utf8"
+	"golang.org/x/text/encoding/unicode"
+	"golang.org/x/text/transform"
+	
 )
 
 const (
@@ -70,11 +74,25 @@ func main() {
 		}
 	}
 
-	wd, err := selenium.NewRemote(caps, seleniumHub)
-	if err != nil {
-		log.Fatal("Erro ao iniciar navegador:", err)
+	var wd selenium.WebDriver
+	maxRetries := 5
+	for i := 0; i < maxRetries; i++ {
+		wd, err = selenium.NewRemote(caps, seleniumHub)
+		if err == nil {
+			break // Success, exit the retry loop
+		}
+		log.Printf("Erro ao iniciar navegador (tentativa %d/%d): %v", i+1, maxRetries, err)
+		if i < maxRetries-1 {
+			log.Println("Tentando novamente em 10 segundos...")
+			time.Sleep(60 * time.Second)
+		}
 	}
-	defer wd.Quit()
+	if err != nil {
+		log.Fatalf("Falha ao iniciar o navegador após %d tentativas. Encerrando.", maxRetries)
+		return
+	}
+	defer func() { wd.Quit() }()
+
 
 	// Abre WhatsApp Web
 	if err := wd.Get("https://web.whatsapp.com"); err != nil {
@@ -96,7 +114,7 @@ func main() {
 			fileInfo.updateLastMod()
 		}
 		enviarMensagensNoHorario(wd)
-		time.Sleep(60 * time.Second) // Check every minute
+		time.Sleep(10 * time.Second) // Check every 10 seconds
 	}
 }
 
@@ -193,6 +211,11 @@ func isSameDay(dateStr string, now time.Time) bool {
 }
 
 func enviarViaSelenium(wd selenium.WebDriver, destino, msg string) error {
+	// Press Esc to close any open menus or pop-ups
+	body, err := wd.FindElement(selenium.ByTagName, "body")
+	if err == nil {
+		body.SendKeys(selenium.EscapeKey)
+	}
 	// Localiza campo de pesquisa
 	searchBox, err := wd.FindElement(selenium.ByXPATH, `//div[@contenteditable="true"][@data-tab="3"]`)
 	if err != nil {
@@ -204,10 +227,10 @@ func enviarViaSelenium(wd selenium.WebDriver, destino, msg string) error {
 	// Wait for the chat to appear in the list
 	time.Sleep(5 * time.Second) // Wait for the chat to appear
 
-	// Click on the chat
 	chat, err := wd.FindElement(selenium.ByXPATH, fmt.Sprintf(`//span[@title="%s"]`, destino))
 	if err != nil {
-		return fmt.Errorf("erro ao encontrar o chat: %v", err)
+		log.Printf("Aviso: Destino '%s' não encontrado na lista de chats. Verifique se o nome está correto e se o chat já foi iniciado.", destino)
+		return nil
 	}
 	chat.Click()
 
@@ -219,7 +242,19 @@ func enviarViaSelenium(wd selenium.WebDriver, destino, msg string) error {
 	if err != nil {
 		return fmt.Errorf("erro ao encontrar a caixa de mensagem: %v", err)
 	}
-	msgBox.SendKeys(msg + "\n")
+
+	// Ensure the message is in Unicode format and encode it
+	if !utf8.ValidString(msg) {
+		msg = string([]rune(msg)) // Convert to a valid UTF-8 string
+	}
+	encoder := unicode.UTF8.NewEncoder()
+	encodedMsg, _, err := transform.String(encoder, msg)
+	if err != nil {
+		return fmt.Errorf("erro ao codificar a mensagem para Unicode: %v", err)
+	}
+
+	msgBox.SendKeys(encodedMsg)
+	msgBox.SendKeys(selenium.EnterKey)
 
 	return nil
 }

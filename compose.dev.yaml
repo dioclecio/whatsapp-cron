@@ -1,6 +1,5 @@
 networks:
     web:
-    
 services:
   browser:
     image: docker.io/selenium/standalone-chromium
@@ -15,9 +14,11 @@ services:
       - web
     environment:
       - SE_NODE_SESSION_TIMEOUT=999999999
+
   whatsapp:
-    image: https://quay.io/dioclecio/whatsapp-cron:latest
+    image: whatsapp-cron:latest
     volumes:
+      - .:/app:rw
       - ./data:/app/data:rw
     networks:
       - web
@@ -26,3 +27,5 @@ services:
       - "TZ=America/Sao_Paulo"
     security_opt:
       - "label=disable"
+    entrypoint: sleep infinity
+

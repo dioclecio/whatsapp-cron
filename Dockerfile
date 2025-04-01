@@ -1,5 +1,5 @@
 # Use the official Go image
-FROM golang:latest AS builder
+FROM docker.io/golang:latest AS builder
 
 # Set the working directory
 WORKDIR /app
@@ -17,7 +17,7 @@ COPY . .
 RUN go build main.go
 
 # Use a lightweight image to run the application
-FROM alpine:latest
+FROM docker.io/alpine:latest
 
 # Install Chromium and ChromeDriver
 RUN apk update && apk add chromium chromium-chromedriver curl tzdata

@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	seleniumPath = "msedgedriver"  // Changed to Edge WebDriver
+	seleniumPath = "chromedriver"  // Changed from geckodriver to chromedriver
 	defaultPort  = 4444
 	dbFile       = "data/mensagens.json" // JSON database file
 )
@@ -42,7 +42,6 @@ type fileInfo struct {
 }
 
 func main() {
-	// Get Selenium Hub address from environment variable
 	seleniumHub := os.Getenv("SELENIUM_HUB")
 	var service *selenium.Service
 	var err error
@@ -50,22 +49,45 @@ func main() {
 	time.Sleep(5 * time.Second)
 
 	if seleniumHub == "" {
-		log.Println("SELENIUM_HUB environment variable not set. Using local EdgeDriver.")
-		service, err = selenium.NewEdgeDriverService(seleniumPath, defaultPort)
+		log.Println("SELENIUM_HUB environment variable not set. Using local ChromeDriver.")
+		service, err = selenium.NewChromeDriverService(seleniumPath, defaultPort)
 		if err != nil {
-			log.Fatal("Erro no EdgeDriver:", err)
+			log.Fatal("Erro no ChromeDriver:", err)
 		}
 		defer service.Stop()
 		seleniumHub = fmt.Sprintf("http://localhost:%d/wd/hub", defaultPort)
-		caps = selenium.Capabilities{"browserName": "MicrosoftEdge"}
+		caps = selenium.Capabilities{
+			"browserName": "chrome",
+			"goog:chromeOptions": map[string]interface{}{
+				"args": []string{
+					"--no-sandbox",
+					"--disable-dev-shm-usage",
+					"--disable-gpu",
+					"--window-size=1920,1080",
+					"--use-fake-ui-for-media-stream",
+                    "--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+				},
+				"prefs": map[string]interface{}{
+					"profile.default_content_setting_values.notifications": 2,
+				},
+			},
+		}
 	} else {
 		log.Printf("SELENIUM_HUB environment variable set. Using remote Selenium Hub: %s\n", seleniumHub)
 		seleniumHub = fmt.Sprintf("http://%s/wd/hub", seleniumHub)
 		caps = selenium.Capabilities{
-			"browserName": "MicrosoftEdge",
-			"ms:edgeOptions": map[string]interface{}{
+			"browserName": "chrome",
+			"goog:chromeOptions": map[string]interface{}{
 				"args": []string{
-					// "--headless",
+					"--no-sandbox",
+					"--disable-dev-shm-usage",
+					"--disable-gpu",
+					"--window-size=1920,1080",
+					"--use-fake-ui-for-media-stream",
+                    "--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+				},
+				"prefs": map[string]interface{}{
+					"profile.default_content_setting_values.notifications": 2,
 				},
 			},
 		}
@@ -80,7 +102,7 @@ func main() {
 		}
 		log.Printf("Erro ao iniciar navegador (tentativa %d/%d): %v", i+1, maxRetries, err)
 		if i < maxRetries-1 {
-			log.Println("Tentando novamente em 10 segundos...")
+			log.Println("Tentando novamente em 60 segundos...")
 			time.Sleep(60 * time.Second)
 		}
 	}
@@ -88,8 +110,26 @@ func main() {
 		log.Fatalf("Falha ao iniciar o navegador após %d tentativas. Encerrando.", maxRetries)
 		return
 	}
-	defer func() { wd.Quit() }()
+	defer func() {
+		if wd != nil {
+			wd.Quit()
+		}
+	}()
 
+	// Configure timeout
+	if err := wd.SetImplicitWaitTimeout(30 * time.Second); err != nil {
+		log.Fatal("Erro ao configurar timeout:", err)
+	}
+
+	// Set page load timeout
+	if err := wd.SetPageLoadTimeout(30 * time.Second); err != nil {
+		log.Fatal("Erro ao configurar page load timeout:", err)
+	}
+
+	// Maximize window
+	if err := wd.MaximizeWindow(""); err != nil {
+		log.Println("Aviso: Não foi possível maximizar a janela:", err)
+	}
 
 	// Abre WhatsApp Web
 	if err := wd.Get("https://web.whatsapp.com"); err != nil {
@@ -214,8 +254,8 @@ func enviarViaSelenium(wd selenium.WebDriver, destino, msg string) error {
 		body.SendKeys(selenium.EscapeKey)
 	}
 
-	// Localiza campo de pesquisa (Edge XPATH)
-	searchBox, err := wd.FindElement(selenium.ByXPATH, `//div[@title="Search input textbox"]`)
+	// Localiza campo de pesquisa (Chromium XPATH)
+	searchBox, err := wd.FindElement(selenium.ByXPATH, `//div[@contenteditable="true"][@data-tab="3"]`)
 	if err != nil {
 		return fmt.Errorf("erro ao encontrar a caixa de pesquisa: %v", err)
 	}
@@ -225,7 +265,7 @@ func enviarViaSelenium(wd selenium.WebDriver, destino, msg string) error {
 	// Wait for the chat to appear in the list
 	time.Sleep(5 * time.Second)
 
-	// Find chat using more robust XPATH for Edge
+	// Find chat using Chromium XPATH
 	chat, err := wd.FindElement(selenium.ByXPATH, fmt.Sprintf(`//span[@title="%s"]`, destino))
 	if err != nil {
 		log.Printf("Aviso: Destino '%s' não encontrado na lista de chats. Verifique se o nome está correto e se o chat já foi iniciado.", destino)
@@ -236,8 +276,8 @@ func enviarViaSelenium(wd selenium.WebDriver, destino, msg string) error {
 	// Wait for the message box to be ready
 	time.Sleep(5 * time.Second)
 
-	// Localiza campo de mensagem (Edge XPATH)
-	msgBox, err := wd.FindElement(selenium.ByXPATH, `//div[@title="Type a message"]`)
+	// Localiza campo de mensagem (Chromium XPATH)
+	msgBox, err := wd.FindElement(selenium.ByXPATH, `//div[@contenteditable="true"][@data-tab="10"]`)
 	if err != nil {
 		return fmt.Errorf("erro ao encontrar a caixa de mensagem: %v", err)
 	}
@@ -253,6 +293,7 @@ func enviarViaSelenium(wd selenium.WebDriver, destino, msg string) error {
 	}
 
 	msgBox.SendKeys(encodedMsg)
+	// Send the message by pressing Enter
 	msgBox.SendKeys(selenium.EnterKey)
 
 	return nil

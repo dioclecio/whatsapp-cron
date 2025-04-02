@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	seleniumPath = "chromedriver"
+	seleniumPath = "msedgedriver"  // Changed to Edge WebDriver
 	defaultPort  = 4444
 	dbFile       = "data/mensagens.json" // JSON database file
 )
@@ -50,25 +50,22 @@ func main() {
 	time.Sleep(5 * time.Second)
 
 	if seleniumHub == "" {
-		log.Println("SELENIUM_HUB environment variable not set. Using local ChromeDriver.")
-		// Configura Selenium locally
-		service, err = selenium.NewChromeDriverService(seleniumPath, defaultPort)
+		log.Println("SELENIUM_HUB environment variable not set. Using local EdgeDriver.")
+		service, err = selenium.NewEdgeDriverService(seleniumPath, defaultPort)
 		if err != nil {
-			log.Fatal("Erro no ChromeDriver:", err)
+			log.Fatal("Erro no EdgeDriver:", err)
 		}
 		defer service.Stop()
 		seleniumHub = fmt.Sprintf("http://localhost:%d/wd/hub", defaultPort)
-		caps = selenium.Capabilities{"browserName": "chrome"}
+		caps = selenium.Capabilities{"browserName": "MicrosoftEdge"}
 	} else {
 		log.Printf("SELENIUM_HUB environment variable set. Using remote Selenium Hub: %s\n", seleniumHub)
 		seleniumHub = fmt.Sprintf("http://%s/wd/hub", seleniumHub)
 		caps = selenium.Capabilities{
-			"browserName": "chrome",
-			"goog:chromeOptions": map[string][]string{
-				"args": {
+			"browserName": "MicrosoftEdge",
+			"ms:edgeOptions": map[string]interface{}{
+				"args": []string{
 					// "--headless",
-					// "--no-sandbox",
-					// "--disable-dev-shm-usage",
 				},
 			},
 		}
@@ -114,7 +111,7 @@ func main() {
 			fileInfo.updateLastMod()
 		}
 		enviarMensagensNoHorario(wd)
-		time.Sleep(10 * time.Second) // Check every 10 seconds
+		time.Sleep(60 * time.Second) // Check every 60 seconds
 	}
 }
 
@@ -216,8 +213,9 @@ func enviarViaSelenium(wd selenium.WebDriver, destino, msg string) error {
 	if err == nil {
 		body.SendKeys(selenium.EscapeKey)
 	}
-	// Localiza campo de pesquisa
-	searchBox, err := wd.FindElement(selenium.ByXPATH, `//div[@contenteditable="true"][@data-tab="3"]`)
+
+	// Localiza campo de pesquisa (Edge XPATH)
+	searchBox, err := wd.FindElement(selenium.ByXPATH, `//div[@title="Search input textbox"]`)
 	if err != nil {
 		return fmt.Errorf("erro ao encontrar a caixa de pesquisa: %v", err)
 	}
@@ -225,8 +223,9 @@ func enviarViaSelenium(wd selenium.WebDriver, destino, msg string) error {
 	searchBox.SendKeys(destino)
 
 	// Wait for the chat to appear in the list
-	time.Sleep(5 * time.Second) // Wait for the chat to appear
+	time.Sleep(5 * time.Second)
 
+	// Find chat using more robust XPATH for Edge
 	chat, err := wd.FindElement(selenium.ByXPATH, fmt.Sprintf(`//span[@title="%s"]`, destino))
 	if err != nil {
 		log.Printf("Aviso: Destino '%s' não encontrado na lista de chats. Verifique se o nome está correto e se o chat já foi iniciado.", destino)
@@ -237,8 +236,8 @@ func enviarViaSelenium(wd selenium.WebDriver, destino, msg string) error {
 	// Wait for the message box to be ready
 	time.Sleep(5 * time.Second)
 
-	// Localiza campo de mensagem
-	msgBox, err := wd.FindElement(selenium.ByXPATH, `//footer//div[@contenteditable="true"]`)
+	// Localiza campo de mensagem (Edge XPATH)
+	msgBox, err := wd.FindElement(selenium.ByXPATH, `//div[@title="Type a message"]`)
 	if err != nil {
 		return fmt.Errorf("erro ao encontrar a caixa de mensagem: %v", err)
 	}

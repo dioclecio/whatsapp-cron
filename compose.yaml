@@ -1,28 +1,28 @@
+version: "3.8"
+
 networks:
-    web:
-    
+  web:
+
 services:
-  browser:
-    image: docker.io/selenium/standalone-chromium
-    networks:
-      - web
-    ports:
-      - "4444:4444"
-    cap_add:
-      - NET_ADMIN
-      - NET_RAW
-    networks:
-      - web
-    environment:
-      - SE_NODE_SESSION_TIMEOUT=999999999
   whatsapp:
-    image: https://quay.io/dioclecio/whatsapp-cron:latest
+    image: whatsapp-cron:latest
     volumes:
       - ./data:/app/data:rw
-    networks:
-      - web
     environment:
-      - "SELENIUM_HUB=browser:4444"
       - "TZ=America/Sao_Paulo"
+      - PLAYWRIGHT_WS_ENDPOINT=ws://playwright:3000
     security_opt:
       - "label=disable"
+    depends_on:
+      - playwright
+    networks:
+      - web
+
+  playwright:
+    image: mcr.microsoft.com/playwright:v1.51.1
+    # volumes:
+    #  - ./data:/app/data:rw # Mount the data directory
+    command: >
+      /bin/sh -c "npx -y playwright@1.51.1 run-server --port 3000 --host 0.0.0.0"
+    networks:
+      - web

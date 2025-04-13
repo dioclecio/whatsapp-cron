@@ -8,17 +8,20 @@ import (
 	"os"
 	"time"
 	"math/rand"
-	"github.com/tebeka/selenium"
+	"github.com/playwright-community/playwright-go"
 	"unicode/utf8"
 	"golang.org/x/text/encoding/unicode"
 	"golang.org/x/text/transform"
-	
+	"github.com/makiuchi-d/gozxing"
+	"github.com/makiuchi-d/gozxing/qrcode"
+	"image/png"
+	"strings"
 )
 
 const (
-	seleniumPath = "chromedriver"  // Changed from geckodriver to chromedriver
-	defaultPort  = 4444
-	dbFile       = "data/mensagens.json" // JSON database file
+	dbFile = "data/mensagens.json"
+	// PlaywrightEndpoint is the environment variable that contains the remote Playwright URL.
+	PlaywrightEndpoint = "ws://playwright:3000" // Default value. Override with env var.
 )
 
 // Mensagem represents a message to be sent.
@@ -28,7 +31,7 @@ type Mensagem struct {
 	Conteudos   []string `json:"conteudos"`
 	UltimoEnvio string `json:"ultimo_envio"`
 	HorarioEnvio string `json:"horario_envio"`
-	DiaSemana   []time.Weekday `json:"dia_semana"` // Add day of the week
+	DiaSemana   []time.Weekday `json:"dia_semana"`
 }
 
 // Database represents the JSON database.
@@ -42,116 +45,70 @@ type fileInfo struct {
 }
 
 func main() {
-	seleniumHub := os.Getenv("SELENIUM_HUB")
-	var service *selenium.Service
-	var err error
-	var caps selenium.Capabilities
-	time.Sleep(5 * time.Second)
-
-	if seleniumHub == "" {
-		log.Println("SELENIUM_HUB environment variable not set. Using local ChromeDriver.")
-		service, err = selenium.NewChromeDriverService(seleniumPath, defaultPort)
-		if err != nil {
-			log.Fatal("Erro no ChromeDriver:", err)
-		}
-		defer service.Stop()
-		seleniumHub = fmt.Sprintf("http://localhost:%d/wd/hub", defaultPort)
-		caps = selenium.Capabilities{
-			"browserName": "chrome",
-			"goog:chromeOptions": map[string]interface{}{
-				"args": []string{
-					"--no-sandbox",
-					"--disable-dev-shm-usage",
-					"--disable-gpu",
-					"--window-size=1920,1080",
-					"--use-fake-ui-for-media-stream",
-                    "--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-				},
-				"prefs": map[string]interface{}{
-					"profile.default_content_setting_values.notifications": 2,
-				},
-			},
-		}
-	} else {
-		log.Printf("SELENIUM_HUB environment variable set. Using remote Selenium Hub: %s\n", seleniumHub)
-		seleniumHub = fmt.Sprintf("http://%s/wd/hub", seleniumHub)
-		caps = selenium.Capabilities{
-			"browserName": "chrome",
-			"goog:chromeOptions": map[string]interface{}{
-				"args": []string{
-					"--no-sandbox",
-					"--disable-dev-shm-usage",
-					"--disable-gpu",
-					"--window-size=1920,1080",
-					"--use-fake-ui-for-media-stream",
-                    "--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-				},
-				"prefs": map[string]interface{}{
-					"profile.default_content_setting_values.notifications": 2,
-				},
-			},
-		}
-	}
-
-	var wd selenium.WebDriver
-	maxRetries := 5
-	for i := 0; i < maxRetries; i++ {
-		wd, err = selenium.NewRemote(caps, seleniumHub)
-		if err == nil {
-			break // Success, exit the retry loop
-		}
-		log.Printf("Erro ao iniciar navegador (tentativa %d/%d): %v", i+1, maxRetries, err)
-		if i < maxRetries-1 {
-			log.Println("Tentando novamente em 60 segundos...")
-			time.Sleep(60 * time.Second)
-		}
-	}
+	// Initialize Playwright
+	pw, err := playwright.Run()
 	if err != nil {
-		log.Fatalf("Falha ao iniciar o navegador após %d tentativas. Encerrando.", maxRetries)
-		return
+		log.Fatalf("Não foi possível iniciar o Playwright: %v", err)
 	}
-	defer func() {
-		if wd != nil {
-			wd.Quit()
-		}
-	}()
+	defer pw.Stop()
 
-	// Configure timeout
-	if err := wd.SetImplicitWaitTimeout(30 * time.Second); err != nil {
-		log.Fatal("Erro ao configurar timeout:", err)
+	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
+		Headless: playwright.Bool(true),
+		Args: []string{"--start-maximized"},
+	})
+	if err != nil {
+		log.Fatalf("Não foi possível iniciar o navegador: %v", err)
 	}
+	defer browser.Close()
 
-	// Set page load timeout
-	if err := wd.SetPageLoadTimeout(30 * time.Second); err != nil {
-		log.Fatal("Erro ao configurar page load timeout:", err)
+	context, err := browser.NewContext(playwright.BrowserNewContextOptions{
+		NoViewport: playwright.Bool(true),
+		UserAgent: playwright.String("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
+	})
+	if err != nil {
+		log.Fatalf("Não foi possível criar o contexto do navegador: %v", err)
 	}
+	defer context.Close()
 
-	// Maximize window
-	if err := wd.MaximizeWindow(""); err != nil {
-		log.Println("Aviso: Não foi possível maximizar a janela:", err)
-	}
-
-	// Abre WhatsApp Web
-	if err := wd.Get("https://web.whatsapp.com"); err != nil {
-		log.Fatal("Erro ao abrir WhatsApp:", err)
+	page, err := context.NewPage()
+	if err != nil {
+		log.Fatalf("Não foi possível criar uma nova página: %v", err)
 	}
 
+	if _, err := page.Goto("https://web.whatsapp.com", playwright.PageGotoOptions{
+		WaitUntil: playwright.WaitUntilStateNetworkidle,
+	}); err != nil {
+		log.Fatalf("Erro ao abrir WhatsApp: %v", err)
+	}
+	log.Printf("Aguarde enquanto o WhatsApp Web carrega...")
+	time.Sleep(30 * time.Second)
 	fmt.Println("Escaneie o QR Code. Você tem 2 minutos.")
+
+	// Take a screenshot and convert to ASCII
+	if _, err := page.Screenshot(playwright.PageScreenshotOptions{
+		Path: playwright.String("data/qrcode.png"), // Save in the data directory
+	}); err != nil {
+		log.Printf("Erro ao tirar screenshot: %v", err)
+	} else {
+		// Convert QR code to ASCII
+		if err := displayQRCodeASCII("data/qrcode.png"); err != nil {
+			log.Printf("Erro ao converter QR code para ASCII: %v", err)
+		}
+	}
+
 	time.Sleep(2 * time.Minute)
 
 	log.Println("Tempo de escaneio vencido.")
-	// Initialize file info
 	fileInfo := &fileInfo{}
 	fileInfo.updateLastMod()
 
-	// Configura agendamento
 	for {
 		if fileInfo.hasChanged() {
 			log.Println("Arquivo mensagens.json foi modificado. Recarregando...")
 			fileInfo.updateLastMod()
 		}
-		enviarMensagensNoHorario(wd)
-		time.Sleep(60 * time.Second) // Check every 60 seconds
+		enviarMensagensNoHorario(page)
+		time.Sleep(60 * time.Second)
 	}
 }
 
@@ -161,7 +118,6 @@ func loadDB() (Database, error) {
 	data, err := ioutil.ReadFile(dbFile)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// Create an empty database if the file doesn't exist
 			db = Database{Mensagens: []Mensagem{}}
 			if err := saveDB(db); err != nil {
 				return db, err
@@ -193,7 +149,7 @@ func saveDB(db Database) error {
 }
 
 // enviarMensagensNoHorario checks if it's time to send messages and sends them.
-func enviarMensagensNoHorario(wd selenium.WebDriver) {
+func enviarMensagensNoHorario(page playwright.Page) {
 	db, err := loadDB()
 	if err != nil {
 		log.Println("Erro ao carregar o banco de dados:", err)
@@ -201,15 +157,14 @@ func enviarMensagensNoHorario(wd selenium.WebDriver) {
 	}
 
 	now := time.Now()
-	currentTime := now.Format("15:04") // Format as HH:MM
+	currentTime := now.Format("15:04")
 	currentDay := now.Weekday()
 
 	for i, msg := range db.Mensagens {
 		if msg.HorarioEnvio == currentTime {
-			// Check if the current day is in the list of allowed days
 			sendToday := false
 			if len(msg.DiaSemana) == 0 {
-				sendToday = true // If no days are specified, send every day
+				sendToday = true
 			} else {
 				for _, day := range msg.DiaSemana {
 					if day == currentDay {
@@ -220,17 +175,16 @@ func enviarMensagensNoHorario(wd selenium.WebDriver) {
 			}
 
 			if sendToday {
-				// Select a random message from the array
 				if len(msg.Conteudos) == 0 {
-							log.Println("Nenhuma mensagem definida para o destinatário:", msg.Destinatario)
-							continue
+					log.Println("Nenhuma mensagem definida para o destinatário:", msg.Destinatario)
+					continue
 				}
-				if err := enviarViaSelenium(wd, msg.Destinatario, msg.Conteudos[rand.Intn(len(msg.Conteudos))]); err != nil {
+				if err := enviarViaPlaywright(page, msg.Destinatario, msg.Conteudos[rand.Intn(len(msg.Conteudos))]); err != nil {
 					log.Println("Falha no envio:", err)
 					continue
 				}
 
-				db.Mensagens[i].UltimoEnvio = now.Format(time.RFC3339) // Update last sent time
+				db.Mensagens[i].UltimoEnvio = now.Format(time.RFC3339)
 				if err := saveDB(db); err != nil {
 					log.Println("Erro ao salvar o banco de dados:", err)
 				}
@@ -239,52 +193,58 @@ func enviarMensagensNoHorario(wd selenium.WebDriver) {
 	}
 }
 
-func isSameDay(dateStr string, now time.Time) bool {
-	t, err := time.Parse(time.RFC3339, dateStr)
-	if err != nil {
-		return false
-	}
-	return now.Year() == t.Year() && now.YearDay() == t.YearDay()
-}
-
-func enviarViaSelenium(wd selenium.WebDriver, destino, msg string) error {
-	// Press Esc to close any open menus or pop-ups
-	body, err := wd.FindElement(selenium.ByTagName, "body")
-	if err == nil {
-		body.SendKeys(selenium.EscapeKey)
+func enviarViaPlaywright(page playwright.Page, destino, msg string) error {
+	// Pressiona Esc para fechar menus ou pop-ups
+	if err := page.Keyboard().Press("Escape"); err != nil {
+		log.Println("Aviso: Não foi possível pressionar Esc:", err)
 	}
 
-	// Localiza campo de pesquisa (Chromium XPATH)
-	searchBox, err := wd.FindElement(selenium.ByXPATH, `//div[@contenteditable="true"][@data-tab="3"]`)
+	// Localiza e limpa o campo de pesquisa
+	searchBox, err := page.WaitForSelector(`[contenteditable="true"][data-tab="3"]`, playwright.PageWaitForSelectorOptions{
+		State: playwright.WaitForSelectorStateVisible,
+	})
 	if err != nil {
 		return fmt.Errorf("erro ao encontrar a caixa de pesquisa: %v", err)
 	}
-	searchBox.Clear()
-	searchBox.SendKeys(destino)
 
-	// Wait for the chat to appear in the list
-	time.Sleep(5 * time.Second)
+	if err := searchBox.Click(); err != nil {
+		return fmt.Errorf("erro ao clicar na caixa de pesquisa: %v", err)
+	}
 
-	// Find chat using Chromium XPATH
-	chat, err := wd.FindElement(selenium.ByXPATH, fmt.Sprintf(`//span[@title="%s"]`, destino))
+	if err := searchBox.Fill(""); err != nil {
+		return fmt.Errorf("erro ao limpar a caixa de pesquisa: %v", err)
+	}
+
+	if err := searchBox.Type(destino); err != nil {
+		return fmt.Errorf("erro ao digitar no campo de pesquisa: %v", err)
+	}
+
+	// Espera o chat aparecer e clica nele
+	chatSelector := fmt.Sprintf(`span[title="%s"]`, destino)
+	chat, err := page.WaitForSelector(chatSelector, playwright.PageWaitForSelectorOptions{
+		State: playwright.WaitForSelectorStateVisible,
+		Timeout: playwright.Float(5000),
+	})
 	if err != nil {
 		log.Printf("Aviso: Destino '%s' não encontrado na lista de chats. Verifique se o nome está correto e se o chat já foi iniciado.", destino)
 		return nil
 	}
-	chat.Click()
 
-	// Wait for the message box to be ready
-	time.Sleep(5 * time.Second)
+	if err := chat.Click(); err != nil {
+		return fmt.Errorf("erro ao clicar no chat: %v", err)
+	}
 
-	// Localiza campo de mensagem (Chromium XPATH)
-	msgBox, err := wd.FindElement(selenium.ByXPATH, `//div[@contenteditable="true"][@data-tab="10"]`)
+	// Localiza e preenche o campo de mensagem
+	msgBox, err := page.WaitForSelector(`[contenteditable="true"][data-tab="10"]`, playwright.PageWaitForSelectorOptions{
+		State: playwright.WaitForSelectorStateVisible,
+	})
 	if err != nil {
 		return fmt.Errorf("erro ao encontrar a caixa de mensagem: %v", err)
 	}
 
-	// Ensure the message is in Unicode format and encode it
+	// Garante que a mensagem está em formato Unicode
 	if !utf8.ValidString(msg) {
-		msg = string([]rune(msg)) // Convert to a valid UTF-8 string
+		msg = string([]rune(msg))
 	}
 	encoder := unicode.UTF8.NewEncoder()
 	encodedMsg, _, err := transform.String(encoder, msg)
@@ -292,9 +252,13 @@ func enviarViaSelenium(wd selenium.WebDriver, destino, msg string) error {
 		return fmt.Errorf("erro ao codificar a mensagem para Unicode: %v", err)
 	}
 
-	msgBox.SendKeys(encodedMsg)
-	// Send the message by pressing Enter
-	msgBox.SendKeys(selenium.EnterKey)
+	if err := msgBox.Fill(encodedMsg); err != nil {
+		return fmt.Errorf("erro ao preencher a caixa de mensagem: %v", err)
+	}
+
+	if err := msgBox.Press("Enter"); err != nil {
+		return fmt.Errorf("erro ao pressionar Enter: %v", err)
+	}
 
 	return nil
 }
@@ -317,4 +281,77 @@ func (fi *fileInfo) hasChanged() bool {
 		return false
 	}
 	return info.ModTime().After(fi.lastMod)
+}
+
+// displayQRCodeASCII converts a QR code image to ASCII art and displays it.
+func displayQRCodeASCII(filepath string) error {
+	// Open and decode the PNG file
+	file, err := os.Open(filepath)
+	if err != nil {
+		return fmt.Errorf("erro ao abrir arquivo de imagem: %v", err)
+	}
+	defer file.Close()
+
+	// Decode PNG image
+	img, err := png.Decode(file)
+	if err != nil {
+		return fmt.Errorf("erro ao decodificar imagem PNG: %v", err)
+	}
+
+	// Convert image to binary bitmap
+	bmp, err := gozxing.NewBinaryBitmapFromImage(img)
+	if err != nil {
+		return fmt.Errorf("erro ao criar bitmap: %v", err)
+	}
+
+	// Create QR reader
+	reader := qrcode.NewQRCodeReader()
+	result, err := reader.Decode(bmp, nil)
+	if err != nil {
+		return fmt.Errorf("erro ao decodificar QR code: %v", err)
+	}
+
+	// Get QR code content
+	qrContent := result.String()
+
+	// Clear terminal for better visibility
+	fmt.Print("\033[H\033[2J")
+
+	// Print header with box drawing characters
+	fmt.Println("\n┌" + strings.Repeat("─", 102) + "┐")
+	fmt.Println("│" + strings.Repeat(" ", 34) + "QR Code - Whatsapp Web" + strings.Repeat(" ", 34) + "│")
+	fmt.Println("│" + strings.Repeat(" ", 28) + "Escaneie usando seu smartphone" + strings.Repeat(" ", 28) + "│")
+	fmt.Println("├" + strings.Repeat("─", 102) + "┤")
+
+	// Create simple ASCII QR representation
+	size := 25 // Adjust size as needed
+	matrix, err := qrcode.NewQRCodeWriter().Encode(
+		qrContent, 
+		gozxing.BarcodeFormat_QR_CODE, // Changed from qrcode.BarcodeFormat_QR_CODE
+		size, 
+		size, 
+		nil,
+	)
+	if err != nil {
+		return fmt.Errorf("erro ao gerar QR code ASCII: %v", err)
+	}
+
+	// Print QR code with borders
+	for y := 0; y < matrix.GetHeight(); y++ {
+		fmt.Print("│ " + strings.Repeat(" ", 2))
+		for x := 0; x < matrix.GetWidth(); x++ {
+			if matrix.Get(x, y) {
+				fmt.Print("██")
+			} else {
+				fmt.Print("  ")
+			}
+		}
+		fmt.Println(strings.Repeat(" ", 2) + "│")
+	}
+
+	// Print footer
+	fmt.Println("└" + strings.Repeat("─", 102) + "┘")
+	fmt.Println("Aguardando scan do QR Code...")
+
+	return nil
 }

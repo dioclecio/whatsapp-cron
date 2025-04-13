@@ -15,7 +15,7 @@ import (
 	"github.com/makiuchi-d/gozxing"
 	"github.com/makiuchi-d/gozxing/qrcode"
 	"image/png"
-	"strings"
+	"github.com/mdp/qrterminal/v3"
 )
 
 const (
@@ -45,36 +45,48 @@ type fileInfo struct {
 }
 
 func main() {
-	// Initialize Playwright
+	// Obtém o endpoint do Playwright a partir da variável de ambiente ou usa o valor padrão
+	endpoint := os.Getenv("PLAYWRIGHT_WS_ENDPOINT")
+	if endpoint == "" {
+		endpoint = PlaywrightEndpoint
+		log.Printf("PLAYWRIGHT_WS_ENDPOINT não definido, usando o valor padrão: %s", endpoint)
+	}
+
+	// Inicializa o Playwright
+	if err := playwright.Install(); err != nil {
+		log.Fatalf("Erro ao instalar o Playwright: %v", err)
+	}
+
 	pw, err := playwright.Run()
 	if err != nil {
 		log.Fatalf("Não foi possível iniciar o Playwright: %v", err)
 	}
 	defer pw.Stop()
 
-	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-		Headless: playwright.Bool(true),
-		Args: []string{"--start-maximized"},
-	})
+	// Conecta ao navegador remoto
+	browser, err := pw.Chromium.Connect(endpoint)
 	if err != nil {
-		log.Fatalf("Não foi possível iniciar o navegador: %v", err)
+		log.Fatalf("Não foi possível conectar ao navegador no endpoint %s: %v", endpoint, err)
 	}
 	defer browser.Close()
 
+	// Cria um novo contexto do navegador
 	context, err := browser.NewContext(playwright.BrowserNewContextOptions{
 		NoViewport: playwright.Bool(true),
-		UserAgent: playwright.String("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
+		UserAgent: playwright.String("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, como Gecko) Chrome/120.0.0.0 Safari/537.36"),
 	})
 	if err != nil {
 		log.Fatalf("Não foi possível criar o contexto do navegador: %v", err)
 	}
 	defer context.Close()
 
+	// Cria uma nova página
 	page, err := context.NewPage()
 	if err != nil {
 		log.Fatalf("Não foi possível criar uma nova página: %v", err)
 	}
 
+	// Navega para o WhatsApp Web
 	if _, err := page.Goto("https://web.whatsapp.com", playwright.PageGotoOptions{
 		WaitUntil: playwright.WaitUntilStateNetworkidle,
 	}); err != nil {
@@ -84,13 +96,13 @@ func main() {
 	time.Sleep(30 * time.Second)
 	fmt.Println("Escaneie o QR Code. Você tem 2 minutos.")
 
-	// Take a screenshot and convert to ASCII
+	// Tira um screenshot e converte para ASCII
 	if _, err := page.Screenshot(playwright.PageScreenshotOptions{
-		Path: playwright.String("data/qrcode.png"), // Save in the data directory
+		Path: playwright.String("data/qrcode.png"), // Salva no diretório data
 	}); err != nil {
 		log.Printf("Erro ao tirar screenshot: %v", err)
 	} else {
-		// Convert QR code to ASCII
+		// Converte o QR code para ASCII
 		if err := displayQRCodeASCII("data/qrcode.png"); err != nil {
 			log.Printf("Erro ao converter QR code para ASCII: %v", err)
 		}
@@ -252,14 +264,17 @@ func enviarViaPlaywright(page playwright.Page, destino, msg string) error {
 		return fmt.Errorf("erro ao codificar a mensagem para Unicode: %v", err)
 	}
 
+	// Preenche o campo de mensagem com o texto codificado
 	if err := msgBox.Fill(encodedMsg); err != nil {
 		return fmt.Errorf("erro ao preencher a caixa de mensagem: %v", err)
 	}
 
+	// Pressiona Enter para enviar a mensagem
 	if err := msgBox.Press("Enter"); err != nil {
 		return fmt.Errorf("erro ao pressionar Enter: %v", err)
 	}
 
+	log.Printf("Mensagem enviada para '%s': %s", destino, msg)
 	return nil
 }
 
@@ -285,73 +300,47 @@ func (fi *fileInfo) hasChanged() bool {
 
 // displayQRCodeASCII converts a QR code image to ASCII art and displays it.
 func displayQRCodeASCII(filepath string) error {
-	// Open and decode the PNG file
+	// Abre o arquivo de imagem
 	file, err := os.Open(filepath)
 	if err != nil {
-		return fmt.Errorf("erro ao abrir arquivo de imagem: %v", err)
+		return fmt.Errorf("erro ao abrir o arquivo de imagem: %v", err)
 	}
 	defer file.Close()
 
-	// Decode PNG image
+	// Decodifica a imagem PNG
 	img, err := png.Decode(file)
 	if err != nil {
-		return fmt.Errorf("erro ao decodificar imagem PNG: %v", err)
+		return fmt.Errorf("erro ao decodificar a imagem PNG: %v", err)
 	}
 
-	// Convert image to binary bitmap
-	bmp, err := gozxing.NewBinaryBitmapFromImage(img)
+	// Converte a imagem para um bitmap binário
+	bitmap, err := gozxing.NewBinaryBitmapFromImage(img)
 	if err != nil {
-		return fmt.Errorf("erro ao criar bitmap: %v", err)
+		return fmt.Errorf("erro ao criar o bitmap binário: %v", err)
 	}
 
-	// Create QR reader
+	// Cria um leitor de QR code
 	reader := qrcode.NewQRCodeReader()
-	result, err := reader.Decode(bmp, nil)
+	result, err := reader.Decode(bitmap, nil)
 	if err != nil {
-		return fmt.Errorf("erro ao decodificar QR code: %v", err)
+		return fmt.Errorf("erro ao decodificar o QR code: %v", err)
 	}
 
-	// Get QR code content
+	// Obtém o conteúdo do QR code
 	qrContent := result.String()
 
-	// Clear terminal for better visibility
+	// Limpa o terminal para melhor visibilidade
 	fmt.Print("\033[H\033[2J")
 
-	// Print header with box drawing characters
-	fmt.Println("\n┌" + strings.Repeat("─", 102) + "┐")
-	fmt.Println("│" + strings.Repeat(" ", 34) + "QR Code - Whatsapp Web" + strings.Repeat(" ", 34) + "│")
-	fmt.Println("│" + strings.Repeat(" ", 28) + "Escaneie usando seu smartphone" + strings.Repeat(" ", 28) + "│")
-	fmt.Println("├" + strings.Repeat("─", 102) + "┤")
-
-	// Create simple ASCII QR representation
-	size := 25 // Adjust size as needed
-	matrix, err := qrcode.NewQRCodeWriter().Encode(
-		qrContent, 
-		gozxing.BarcodeFormat_QR_CODE, // Changed from qrcode.BarcodeFormat_QR_CODE
-		size, 
-		size, 
-		nil,
-	)
-	if err != nil {
-		return fmt.Errorf("erro ao gerar QR code ASCII: %v", err)
-	}
-
-	// Print QR code with borders
-	for y := 0; y < matrix.GetHeight(); y++ {
-		fmt.Print("│ " + strings.Repeat(" ", 2))
-		for x := 0; x < matrix.GetWidth(); x++ {
-			if matrix.Get(x, y) {
-				fmt.Print("██")
-			} else {
-				fmt.Print("  ")
-			}
-		}
-		fmt.Println(strings.Repeat(" ", 2) + "│")
-	}
-
-	// Print footer
-	fmt.Println("└" + strings.Repeat("─", 102) + "┘")
-	fmt.Println("Aguardando scan do QR Code...")
+	// Gera e exibe o QR code no terminal
+	fmt.Println("\nQR Code gerado a partir do conteúdo:")
+	qrterminal.GenerateWithConfig(qrContent, qrterminal.Config{
+		Level:     qrterminal.L,
+		Writer:    os.Stdout,
+		BlackChar: qrterminal.BLACK,
+		WhiteChar: qrterminal.WHITE,
+		QuietZone: 1,
+	})
 
 	return nil
 }

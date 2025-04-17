@@ -20,8 +20,6 @@ import (
 
 const (
 	dbFile = "data/mensagens.json"
-	// PlaywrightEndpoint is the environment variable that contains the remote Playwright URL.
-	PlaywrightEndpoint = "ws://playwright:3000" // Default value. Override with env var.
 )
 
 // Mensagem represents a message to be sent.
@@ -45,13 +43,6 @@ type fileInfo struct {
 }
 
 func main() {
-	// Obtém o endpoint do Playwright a partir da variável de ambiente ou usa o valor padrão
-	endpoint := os.Getenv("PLAYWRIGHT_WS_ENDPOINT")
-	if endpoint == "" {
-		endpoint = PlaywrightEndpoint
-		log.Printf("PLAYWRIGHT_WS_ENDPOINT não definido, usando o valor padrão: %s", endpoint)
-	}
-
 	// Inicializa o Playwright
 	if err := playwright.Install(); err != nil {
 		log.Fatalf("Erro ao instalar o Playwright: %v", err)
@@ -63,10 +54,12 @@ func main() {
 	}
 	defer pw.Stop()
 
-	// Conecta ao navegador remoto
-	browser, err := pw.Chromium.Connect(endpoint)
+	// Inicia um navegador local
+	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
+		Headless: playwright.Bool(true), // Modo headless ativado
+	})
 	if err != nil {
-		log.Fatalf("Não foi possível conectar ao navegador no endpoint %s: %v", endpoint, err)
+		log.Fatalf("Não foi possível iniciar o navegador: %v", err)
 	}
 	defer browser.Close()
 
@@ -93,15 +86,24 @@ func main() {
 		log.Fatalf("Erro ao abrir WhatsApp: %v", err)
 	}
 	log.Printf("Aguarde enquanto o WhatsApp Web carrega...")
-	time.Sleep(30 * time.Second)
+	// time.Sleep(30 * time.Second)
 	fmt.Println("Escaneie o QR Code. Você tem 2 minutos.")
 
-	// Tira um screenshot e converte para ASCII
+	// Garante que o diretório 'data' existe
+	if _, err := os.Stat("data"); os.IsNotExist(err) {
+		if err := os.Mkdir("data", 0755); err != nil {
+			log.Fatalf("Erro ao criar o diretório 'data': %v", err)
+		}
+	}
+
+	// Tira um screenshot e salva no diretório especificado
 	if _, err := page.Screenshot(playwright.PageScreenshotOptions{
 		Path: playwright.String("data/qrcode.png"), // Salva no diretório data
+		FullPage: playwright.Bool(true),           // Captura a página inteira
 	}); err != nil {
 		log.Printf("Erro ao tirar screenshot: %v", err)
 	} else {
+		log.Println("Screenshot capturado com sucesso: data/qrcode.png")
 		// Converte o QR code para ASCII
 		if err := displayQRCodeASCII("data/qrcode.png"); err != nil {
 			log.Printf("Erro ao converter QR code para ASCII: %v", err)

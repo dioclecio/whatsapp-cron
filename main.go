@@ -48,11 +48,25 @@ func main() {
 	if err != nil {
 		log.Fatalf("Não foi possível iniciar o Playwright: %v", err)
 	}
+	if pw == nil {
+		log.Fatalf("Playwright não foi inicializado corretamente")
+	}
 	defer pw.Stop()
+
+	// Verifica e instala apenas o driver do Chromium
+	if err := playwright.Install(&playwright.RunOptions{
+		Browsers: []string{"chromium"},
+	}); err != nil {
+		log.Fatalf("Erro ao instalar o driver do Playwright (Chromium): %v", err)
+	}
 
 	log.Println("Iniciando o navegador...")
 	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-		Headless: playwright.Bool(true), // Modo headless ativado
+		Headless: playwright.Bool(true),
+		Args: []string{
+			"--window-position=50,50",
+			"--window-size=800,600",
+		},
 	})
 	if err != nil {
 		log.Fatalf("Não foi possível iniciar o navegador: %v", err)

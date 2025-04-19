@@ -81,7 +81,7 @@ func main() {
 		log.Fatalf("Erro ao abrir WhatsApp: %v", err)
 	}
 	log.Printf("Aguarde enquanto o WhatsApp Web carrega...")
-	time.Sleep(30 * time.Second)
+	time.Sleep(10 * time.Second)
 	fmt.Println("Escaneie o QR Code. Você tem 2 minutos.")
 
 	// Take a screenshot and convert to ASCII

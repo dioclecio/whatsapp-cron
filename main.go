@@ -77,12 +77,13 @@ func main() {
 
 	if _, err := page.Goto("https://web.whatsapp.com", playwright.PageGotoOptions{
 		WaitUntil: playwright.WaitUntilStateNetworkidle,
+		Timeout:   playwright.Float(30000), // Aumenta o timeout para 30 segundos
 	}); err != nil {
 		log.Fatalf("Erro ao abrir WhatsApp: %v", err)
 	}
 	log.Printf("Aguarde enquanto o WhatsApp Web carrega...")
-	time.Sleep(10 * time.Second)
-	fmt.Println("Escaneie o QR Code. Você tem 2 minutos.")
+	time.Sleep(20 * time.Second)
+	fmt.Println("Escaneie o QR Code. Você tem 1 minuto.")
 
 	// Take a screenshot and convert to ASCII
 	if _, err := page.Screenshot(playwright.PageScreenshotOptions{
@@ -96,7 +97,7 @@ func main() {
 		}
 	}
 
-	time.Sleep(2 * time.Minute)
+	time.Sleep(1 * time.Minute)
 
 	log.Println("Tempo de escaneio vencido.")
 	fileInfo := &fileInfo{}

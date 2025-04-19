@@ -1,6 +1,6 @@
 services:
   whatsapp:
-    image: whatsapp-cron:latest
+    image: quay.io/dioclecio/whatsapp-cron:latest
     volumes:
       - ./data:/app/data:rw
     environment:

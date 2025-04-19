@@ -17,11 +17,15 @@ COPY . .
 RUN go build -o main main.go
 
 # Use a imagem oficial do Playwright para a etapa final
-FROM mcr.microsoft.com/playwright:v1.39.0-focal
+FROM mcr.microsoft.com/playwright:latest
 
 # Instalar dependências adicionais necessárias
-RUN apt update && apt upgrade -y && apt install -y curl tzdata
+RUN apt update && apt upgrade -y 
 
+RUN DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt install -y curl tzdata xvfb
+
+RUN npx playwright install
+RUN npx playwright install-deps
 # Set the working directory
 WORKDIR /app
 
@@ -35,4 +39,4 @@ COPY --from=builder /app/data ./data
 ENV TZ=America/Sao_Paulo
 
 # Set the entry point for the container
-ENTRYPOINT ["xvfb-run", "--server-args=-screen 0 1920x1080x24", "/app/main"]
+ENTRYPOINT ["/usr/bin/xvfb-run", "--server-args=-screen 0 1920x1080x16", "/app/main"]

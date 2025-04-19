@@ -43,18 +43,14 @@ type fileInfo struct {
 }
 
 func main() {
-	// Inicializa o Playwright
-	if err := playwright.Install(); err != nil {
-		log.Fatalf("Erro ao instalar o Playwright: %v", err)
-	}
-
+	log.Println("Inicializando o Playwright...")
 	pw, err := playwright.Run()
 	if err != nil {
 		log.Fatalf("Não foi possível iniciar o Playwright: %v", err)
 	}
 	defer pw.Stop()
 
-	// Inicia um navegador local
+	log.Println("Iniciando o navegador...")
 	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
 		Headless: playwright.Bool(true), // Modo headless ativado
 	})
@@ -63,30 +59,30 @@ func main() {
 	}
 	defer browser.Close()
 
-	// Cria um novo contexto do navegador
-	context, err := browser.NewContext(playwright.BrowserNewContextOptions{
-		NoViewport: playwright.Bool(true),
-		UserAgent: playwright.String("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, como Gecko) Chrome/120.0.0.0 Safari/537.36"),
-	})
-	if err != nil {
-		log.Fatalf("Não foi possível criar o contexto do navegador: %v", err)
+	if !browser.IsConnected() {
+		log.Fatalf("O navegador não foi conectado corretamente.")
+	} else {
+		log.Println("Navegador iniciado e conectado com sucesso.")
 	}
-	defer context.Close()
 
-	// Cria uma nova página
-	page, err := context.NewPage()
+	log.Println("Criando uma nova página...")
+	page, err := browser.NewPage()
 	if err != nil {
 		log.Fatalf("Não foi possível criar uma nova página: %v", err)
+	} else {
+		log.Println("Página criada com sucesso.")
 	}
 
-	// Navega para o WhatsApp Web
+	log.Println("Navegando para o WhatsApp Web...")
 	if _, err := page.Goto("https://web.whatsapp.com", playwright.PageGotoOptions{
 		WaitUntil: playwright.WaitUntilStateNetworkidle,
 	}); err != nil {
 		log.Fatalf("Erro ao abrir WhatsApp: %v", err)
+	} else {
+		log.Println("WhatsApp Web carregado com sucesso.")
 	}
+
 	log.Printf("Aguarde enquanto o WhatsApp Web carrega...")
-	// time.Sleep(30 * time.Second)
 	fmt.Println("Escaneie o QR Code. Você tem 2 minutos.")
 
 	// Garante que o diretório 'data' existe

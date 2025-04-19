@@ -63,7 +63,7 @@ func main() {
 
 	context, err := browser.NewContext(playwright.BrowserNewContextOptions{
 		NoViewport: playwright.Bool(true),
-		UserAgent: playwright.String("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
+		UserAgent: playwright.String("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
 	})
 	if err != nil {
 		log.Fatalf("Não foi possível criar o contexto do navegador: %v", err)
@@ -252,10 +252,23 @@ func enviarViaPlaywright(page playwright.Page, destino, msg string) error {
 		return fmt.Errorf("erro ao codificar a mensagem para Unicode: %v", err)
 	}
 
-	if err := msgBox.Fill(encodedMsg); err != nil {
-		return fmt.Errorf("erro ao preencher a caixa de mensagem: %v", err)
+	// Divide a mensagem em partes usando "\r" como separador
+	parts := strings.Split(encodedMsg, "\r")
+
+	// Simula a digitação da mensagem, inserindo Shift+Enter entre as partes
+	for i, part := range parts {
+		if err := msgBox.Type(part); err != nil {
+			return fmt.Errorf("erro ao digitar a mensagem: %v", err)
+		}
+		if i < len(parts)-1 {
+			// Simula Shift+Enter para criar uma nova linha
+			if err := msgBox.Press("Shift+Enter"); err != nil {
+				return fmt.Errorf("erro ao pressionar Shift+Enter: %v", err)
+			}
+		}
 	}
 
+	// Pressiona Enter para enviar a mensagem
 	if err := msgBox.Press("Enter"); err != nil {
 		return fmt.Errorf("erro ao pressionar Enter: %v", err)
 	}
@@ -324,12 +337,12 @@ func displayQRCodeASCII(filepath string) error {
 	fmt.Println("├" + strings.Repeat("─", 102) + "┤")
 
 	// Create simple ASCII QR representation
-	size := 25 // Adjust size as needed
+	size := 15 // Reduzido para ajustar as dimensões do QR Code
 	matrix, err := qrcode.NewQRCodeWriter().Encode(
-		qrContent, 
-		gozxing.BarcodeFormat_QR_CODE, // Changed from qrcode.BarcodeFormat_QR_CODE
-		size, 
-		size, 
+		qrContent,
+		gozxing.BarcodeFormat_QR_CODE,
+		size,
+		size,
 		nil,
 	)
 	if err != nil {

@@ -14,21 +14,19 @@ RUN go mod download
 RUN go install github.com/playwright-community/playwright-go/cmd/playwright@latest
 
 # Install Playwright browsers
-RUN playwright install --with-deps
+RUN playwright install chromium --with-deps
 
 # Copy the source code
 COPY . .
 
 # Build the Go application
-RUN CGO_ENABLED=0 go build main.go
+RUN go build main.go
 
 FROM docker.io/golang:latest
 
 RUN apt update && apt upgrade -y && apt install -y curl tzdata
 RUN go install github.com/playwright-community/playwright-go/cmd/playwright@latest
-RUN playwright install --with-deps
-
-
+RUN playwright install chromium --with-deps
 
 # Set the working directory
 WORKDIR /app

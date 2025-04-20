@@ -10,23 +10,24 @@ COPY go.mod go.sum ./
 # Download dependencies
 RUN go mod download
 
+# Install Playwright CLI
+RUN go install github.com/playwright-community/playwright-go/cmd/playwright@latest
+
+# Install Playwright browsers
+RUN playwright install chromium --with-deps
+
 # Copy the source code
 COPY . .
 
 # Build the Go application
-RUN go build -o main main.go
+RUN go build main.go
 
 # Use a imagem oficial do Playwright para a etapa final
 FROM mcr.microsoft.com/playwright:latest
 
-# Instalar dependências adicionais necessárias
-
-
-RUN apt update && apt upgrade -y 
-RUN DEBIAN_FRONTEND=noninteractive TZ=America/Sao_Paulo apt install -y curl tzdata libnss3  libatk1.0-0  libatk-bridge2.0-0  libcups2  libdrm2  libxkbcommon0  libxcomposite1  libxdamage1  libxfixes3  libxrandr2  libgbm1  libpango-1.0-0  libasound2
-RUN npm install -g npm
-RUN npx playwright install chromium
-RUN npx playwright install-deps chromium
+RUN apt update && apt upgrade -y && apt install -y curl tzdata
+RUN go install github.com/playwright-community/playwright-go/cmd/playwright@latest
+RUN playwright install chromium --with-deps
 
 # Set the working directory
 WORKDIR /app

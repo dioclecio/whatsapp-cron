@@ -73,10 +73,12 @@ func main() {
 	}
 	defer browser.Close()
 
-	if !browser.IsConnected() {
-		log.Fatalf("O navegador não foi conectado corretamente.")
-	} else {
-		log.Println("Navegador iniciado e conectado com sucesso.")
+	context, err := browser.NewContext(playwright.BrowserNewContextOptions{
+		NoViewport: playwright.Bool(true),
+		UserAgent: playwright.String("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
+	})
+	if err != nil {
+		log.Fatalf("Não foi possível criar o contexto do navegador: %v", err)
 	}
 
 	log.Println("Criando uma nova página...")
@@ -90,6 +92,7 @@ func main() {
 	log.Println("Navegando para o WhatsApp Web...")
 	if _, err := page.Goto("https://web.whatsapp.com", playwright.PageGotoOptions{
 		WaitUntil: playwright.WaitUntilStateNetworkidle,
+		Timeout:   playwright.Float(30000), // Aumenta o timeout para 30 segundos
 	}); err != nil {
 		log.Fatalf("Erro ao abrir WhatsApp: %v", err)
 	} else {
@@ -97,7 +100,8 @@ func main() {
 	}
 
 	log.Printf("Aguarde enquanto o WhatsApp Web carrega...")
-	fmt.Println("Escaneie o QR Code. Você tem 2 minutos.")
+	time.Sleep(20 * time.Second)
+	fmt.Println("Escaneie o QR Code. Você tem 1 minuto.")
 
 	// Garante que o diretório 'data' existe
 	if _, err := os.Stat("data"); os.IsNotExist(err) {
@@ -120,7 +124,7 @@ func main() {
 		}
 	}
 
-	time.Sleep(2 * time.Minute)
+	time.Sleep(1 * time.Minute)
 
 	log.Println("Tempo de escaneio vencido.")
 	fileInfo := &fileInfo{}
@@ -276,9 +280,20 @@ func enviarViaPlaywright(page playwright.Page, destino, msg string) error {
 		return fmt.Errorf("erro ao codificar a mensagem para Unicode: %v", err)
 	}
 
-	// Preenche o campo de mensagem com o texto codificado
-	if err := msgBox.Fill(encodedMsg); err != nil {
-		return fmt.Errorf("erro ao preencher a caixa de mensagem: %v", err)
+	// Divide a mensagem em partes usando "\r" como separador
+	parts := strings.Split(encodedMsg, "\r")
+
+	// Simula a digitação da mensagem, inserindo Shift+Enter entre as partes
+	for i, part := range parts {
+		if err := msgBox.Type(part); err != nil {
+			return fmt.Errorf("erro ao digitar a mensagem: %v", err)
+		}
+		if i < len(parts)-1 {
+			// Simula Shift+Enter para criar uma nova linha
+			if err := msgBox.Press("Shift+Enter"); err != nil {
+				return fmt.Errorf("erro ao pressionar Shift+Enter: %v", err)
+			}
+		}
 	}
 
 	// Pressiona Enter para enviar a mensagem
@@ -344,15 +359,41 @@ func displayQRCodeASCII(filepath string) error {
 	// Limpa o terminal para melhor visibilidade
 	fmt.Print("\033[H\033[2J")
 
-	// Gera e exibe o QR code no terminal
-	fmt.Println("\nQR Code gerado a partir do conteúdo:")
-	qrterminal.GenerateWithConfig(qrContent, qrterminal.Config{
-		Level:     qrterminal.L,
-		Writer:    os.Stdout,
-		BlackChar: qrterminal.BLACK,
-		WhiteChar: qrterminal.WHITE,
-		QuietZone: 1,
-	})
+	// Print header with box drawing characters
+	fmt.Println("\n┌" + strings.Repeat("─", 102) + "┐")
+	fmt.Println("│" + strings.Repeat(" ", 34) + "QR Code - Whatsapp Web" + strings.Repeat(" ", 34) + "│")
+	fmt.Println("│" + strings.Repeat(" ", 28) + "Escaneie usando seu smartphone" + strings.Repeat(" ", 28) + "│")
+	fmt.Println("├" + strings.Repeat("─", 102) + "┤")
+
+	// Create simple ASCII QR representation
+	size := 15 // Reduzido para ajustar as dimensões do QR Code
+	matrix, err := qrcode.NewQRCodeWriter().Encode(
+		qrContent,
+		gozxing.BarcodeFormat_QR_CODE,
+		size,
+		size,
+		nil,
+	)
+	if err != nil {
+		return fmt.Errorf("erro ao gerar QR code ASCII: %v", err)
+	}
+
+	// Print QR code with borders
+	for y := 0; y < matrix.GetHeight(); y++ {
+		fmt.Print("│ " + strings.Repeat(" ", 2))
+		for x := 0; x < matrix.GetWidth(); x++ {
+			if matrix.Get(x, y) {
+				fmt.Print("██")
+			} else {
+				fmt.Print("  ")
+			}
+		}
+		fmt.Println(strings.Repeat(" ", 2) + "│")
+	}
+
+	// Print footer
+	fmt.Println("└" + strings.Repeat("─", 102) + "┘")
+	fmt.Println("Aguardando scan do QR Code...")
 
 	return nil
 }

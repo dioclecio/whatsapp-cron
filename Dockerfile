@@ -26,7 +26,7 @@ ENV TZ=America/Sao_Paulo
 # RUN apt update && apt upgrade -y && apt install -y curl tzdata
 # RUN apt update && apt upgrade -y 
 RUN go install github.com/playwright-community/playwright-go/cmd/playwright@latest
-RUN playwright install chromium-headless-shell --with-deps
+RUN playwright install firefox --with-deps
 
 # Set the working directory
 WORKDIR /app

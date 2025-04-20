@@ -53,26 +53,30 @@ func main() {
 	}
 	defer pw.Stop()
 
-	// Verifica e instala apenas o driver do Chromium
+	// Verifica e instala apenas o driver do Firefox
 	if err := playwright.Install(&playwright.RunOptions{
-		Browsers: []string{"chromium-headless-shell"},
+		Browsers: []string{"firefox"},
 	}); err != nil {
-		log.Fatalf("Erro ao instalar o driver do Playwright (Chromium): %v", err)
+		log.Fatalf("Erro ao instalar o driver do Playwright (Firefox): %v", err)
 	}
 
-	log.Println("Iniciando o navegador...")
-	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
+	log.Println("Iniciando o navegador Firefox...")
+	browser, err := pw.Firefox.Launch(playwright.BrowserTypeLaunchOptions{
 		Headless: playwright.Bool(true),
 		Args: []string{
-				"--no-sandbox",
-				"--disable-setuid-sandbox",
-				"--disable-dev-shm-usage",
-				"--disable-accelerated-2d-canvas",
-				"--no-first-run",
-				"--no-zygote",
-				"--disable-gpu",
-				"--deterministic-fetch",
-				"--disable-features=IsolateOrigins,site-per-process",
+			"--no-sandbox",
+			"--disable-setuid-sandbox",
+			"--disable-dev-shm-usage",
+			"--no-first-run",
+			// "--disable-gpu",
+			"--window-size=1280,720",
+			"--start-maximized",
+		},
+		FirefoxUserPrefs: map[string]interface{}{
+			"media.navigator.streams.fake": true,
+			"media.navigator.permission.disabled": true,
+			"permissions.default.microphone": 1,
+			"permissions.default.camera": 1,
 		},
 	})
 	if err != nil {
@@ -82,8 +86,8 @@ func main() {
 
 	context, err := browser.NewContext(playwright.BrowserNewContextOptions{
 		NoViewport: playwright.Bool(true),
-		UserAgent: playwright.String("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36"),
-		
+		UserAgent: playwright.String("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0"),
+		Permissions: []string{"notifications", "persistent-storage"},
 	})
 	if err != nil {
 		log.Fatalf("Não foi possível criar o contexto do navegador: %v", err)
@@ -91,7 +95,7 @@ func main() {
 	defer context.Close()
 
 	log.Println("Criando uma nova página...")
-	page, err := browser.NewPage()
+	page, err := context.NewPage() // Mudando de browser.NewPage() para context.NewPage()
 	if err != nil {
 		log.Fatalf("Não foi possível criar uma nova página: %v", err)
 	} else {

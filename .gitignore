@@ -2,3 +2,12 @@ main
 data/qrcode.png
 auth.json
 .version
+
+# Playwright
+node_modules/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+tests
+tests-examples

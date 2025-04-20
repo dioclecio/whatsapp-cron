@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"strings" // Add this import
 	"time"
 	"math/rand"
 	"github.com/playwright-community/playwright-go"
@@ -15,7 +16,6 @@ import (
 	"github.com/makiuchi-d/gozxing"
 	"github.com/makiuchi-d/gozxing/qrcode"
 	"image/png"
-	"github.com/mdp/qrterminal/v3"
 )
 
 const (
@@ -55,7 +55,7 @@ func main() {
 
 	// Verifica e instala apenas o driver do Chromium
 	if err := playwright.Install(&playwright.RunOptions{
-		Browsers: []string{"chromium"},
+		Browsers: []string{"chromium-headless-shell"},
 	}); err != nil {
 		log.Fatalf("Erro ao instalar o driver do Playwright (Chromium): %v", err)
 	}
@@ -64,8 +64,15 @@ func main() {
 	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
 		Headless: playwright.Bool(true),
 		Args: []string{
-			"--window-position=50,50",
-			"--window-size=800,600",
+				"--no-sandbox",
+				"--disable-setuid-sandbox",
+				"--disable-dev-shm-usage",
+				"--disable-accelerated-2d-canvas",
+				"--no-first-run",
+				"--no-zygote",
+				"--disable-gpu",
+				"--deterministic-fetch",
+				"--disable-features=IsolateOrigins,site-per-process",
 		},
 	})
 	if err != nil {
@@ -75,11 +82,13 @@ func main() {
 
 	context, err := browser.NewContext(playwright.BrowserNewContextOptions{
 		NoViewport: playwright.Bool(true),
-		UserAgent: playwright.String("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
+		UserAgent: playwright.String("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36"),
+		
 	})
 	if err != nil {
 		log.Fatalf("Não foi possível criar o contexto do navegador: %v", err)
 	}
+	defer context.Close()
 
 	log.Println("Criando uma nova página...")
 	page, err := browser.NewPage()
@@ -92,7 +101,7 @@ func main() {
 	log.Println("Navegando para o WhatsApp Web...")
 	if _, err := page.Goto("https://web.whatsapp.com", playwright.PageGotoOptions{
 		WaitUntil: playwright.WaitUntilStateNetworkidle,
-		Timeout:   playwright.Float(30000), // Aumenta o timeout para 30 segundos
+		Timeout:   playwright.Float(2147483647), // Aumenta o timeout para 24 dias
 	}); err != nil {
 		log.Fatalf("Erro ao abrir WhatsApp: %v", err)
 	} else {

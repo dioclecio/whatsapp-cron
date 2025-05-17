@@ -8,15 +8,15 @@ Utilize o compose.yaml para executar as funções.
 Usar o docker-compose
 > docker-compose up -d
 
-Em seguida, você deverá ver o log do Whatsapp para escanear o QRCode, conforme mostra a imagem abaixo.
-
-![Código QRCode a ser escaneado ao ver os logs](./img/qrcode.png)
-
 # Fazendo funcionar
 Em seguida você deve escanear o QRCode com seu Whatsapp.
 Para isso, você terá 1 minutos para ver o log e escanear.
 
 > docker-compose logs whatsapp -f
+
+Em seguida, você deverá ver o log do Whatsapp para escanear o QRCode, conforme mostra a imagem abaixo.
+
+![Código QRCode a ser escaneado ao ver os logs](./img/qrcode.png)
 
 # Mensagens
 Para ver como formatar as mensagens. Veja o exemplo do arquivo [mensagens.json](data/mensagens.json)

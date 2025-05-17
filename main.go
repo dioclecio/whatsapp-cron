@@ -86,7 +86,7 @@ func main() {
 
 	context, err := browser.NewContext(playwright.BrowserNewContextOptions{
 		NoViewport: playwright.Bool(true),
-		UserAgent: playwright.String("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0"),
+		// UserAgent: playwright.String("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/135.0"),
 		Permissions: []string{"notifications", "persistent-storage"},
 	})
 	if err != nil {
@@ -112,8 +112,8 @@ func main() {
 		log.Println("WhatsApp Web carregado com sucesso.")
 	}
 
-	log.Printf("Aguarde enquanto o WhatsApp Web carrega...")
-	time.Sleep(20 * time.Second)
+	log.Printf("Aguarde enquanto o WhatsApp Web carrega o QRCode...")
+	time.Sleep(40 * time.Second)
 	fmt.Println("Escaneie o QR Code. Você tem 1 minuto.")
 
 	// Garante que o diretório 'data' existe

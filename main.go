@@ -1,17 +1,20 @@
 package main
 
 import (
+	//"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
-	"strings" // Add this import
+	"strings"
+	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 	"math/rand"
 	"github.com/playwright-community/playwright-go"
-	"unicode/utf8"
-	"golang.org/x/text/encoding/unicode"
+	encoding "golang.org/x/text/encoding/unicode" // Renamed to avoid conflict
 	"golang.org/x/text/transform"
 	"github.com/makiuchi-d/gozxing"
 	"github.com/makiuchi-d/gozxing/qrcode"
@@ -42,6 +45,58 @@ type fileInfo struct {
 	lastMod time.Time
 }
 
+// RateLimit controla o número de mensagens enviadas
+type RateLimit struct {
+	counter    int
+	lastReset  time.Time
+	mutex      sync.Mutex
+}
+
+// SecureLogger gerencia logs seguros
+type SecureLogger struct {
+	logger *log.Logger
+	file   *os.File
+}
+
+func (r *RateLimit) canSend() bool {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
+	if time.Since(r.lastReset) > time.Hour {
+		r.counter = 0
+		r.lastReset = time.Now()
+	}
+
+	if r.counter >= 100 { // Limite de 100 mensagens por hora
+		return false
+	}
+
+	r.counter++
+	return true
+}
+
+func sanitizeInput(input string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsPrint(r) && r != '`' && r != '\'' && r != '"' {
+			return r
+		}
+		return -1
+	}, input)
+}
+
+func validateMessage(msg Mensagem) error {
+	if msg.ID <= 0 {
+		return fmt.Errorf("ID inválido")
+	}
+	if len(msg.Destinatario) == 0 {
+		return fmt.Errorf("destinatário vazio")
+	}
+	if len(msg.Conteudos) == 0 {
+		return fmt.Errorf("conteúdo vazio")
+	}
+	return nil
+}
+
 func main() {
 	log.Println("Inicializando o Playwright...")
 	pw, err := playwright.Run()
@@ -52,6 +107,11 @@ func main() {
 		log.Fatalf("Playwright não foi inicializado corretamente")
 	}
 	defer pw.Stop()
+
+	// Inicializa o rate limiter
+	rateLimiter := &RateLimit{
+		lastReset: time.Now(),
+	}
 
 	// Verifica e instala apenas o driver do Firefox
 	if err := playwright.Install(&playwright.RunOptions{
@@ -67,10 +127,20 @@ func main() {
 			"--no-sandbox",
 			"--disable-setuid-sandbox",
 			"--disable-dev-shm-usage",
-			"--no-first-run",
+			 "--disable-notifications",
 			// "--disable-gpu",
-			"--window-size=1280,720",
-			"--start-maximized",
+			"--disable-software-rasterizer",
+			"--disable-extensions",
+			"--disable-remote-fonts",
+			"--disable-background-networking",
+			"--disable-default-apps",
+			"--disable-sync",
+			"--disable-translate",
+			"--hide-scrollbars",
+			"--metrics-recording-only",
+			"--mute-audio",
+			"--no-first-run",
+			"--safebrowsing-disable-auto-update",
 		},
 		FirefoxUserPrefs: map[string]interface{}{
 			"media.navigator.streams.fake": true,
@@ -95,7 +165,7 @@ func main() {
 	defer context.Close()
 
 	log.Println("Criando uma nova página...")
-	page, err := context.NewPage() // Mudando de browser.NewPage() para context.NewPage()
+	page, err := context.NewPage()
 	if err != nil {
 		log.Fatalf("Não foi possível criar uma nova página: %v", err)
 	} else {
@@ -105,16 +175,36 @@ func main() {
 	log.Println("Navegando para o WhatsApp Web...")
 	if _, err := page.Goto("https://web.whatsapp.com", playwright.PageGotoOptions{
 		WaitUntil: playwright.WaitUntilStateNetworkidle,
-		Timeout:   playwright.Float(2147483647), // Aumenta o timeout para 24 dias
+		Timeout:   playwright.Float(2147483647),
 	}); err != nil {
 		log.Fatalf("Erro ao abrir WhatsApp: %v", err)
 	} else {
 		log.Println("WhatsApp Web carregado com sucesso.")
 	}
 
-	log.Printf("Aguarde enquanto o WhatsApp Web carrega o QRCode...")
-	time.Sleep(40 * time.Second)
-	fmt.Println("Escaneie o QR Code. Você tem 1 minuto.")
+	log.Printf("Aguardando enquanto o WhatsApp Web carrega e exibe o QR Code...")
+	qrSelector := "canvas[aria-label='Scan me!'], canvas[role='img'], canvas"
+	maxWait := 2 * time.Minute
+	interval := 10 * time.Second
+	start := time.Now()
+	var qrFound bool
+	for time.Since(start) < maxWait {
+		qr, err := page.QuerySelector(qrSelector)
+		if err == nil && qr != nil {
+			// Verifica se o elemento está visível
+			visible, _ := qr.IsVisible()
+			if visible {
+				qrFound = true
+				break
+			}
+		}
+		log.Println("QR Code ainda não disponível. Aguardando 10 segundos...")
+		time.Sleep(interval)
+	}
+	if !qrFound {
+		log.Fatalf("QR Code não encontrado na página após %v.", maxWait)
+	}
+	fmt.Println("QR Code detectado! Capturando screenshot...")
 
 	// Garante que o diretório 'data' existe
 	if _, err := os.Stat("data"); os.IsNotExist(err) {
@@ -125,8 +215,8 @@ func main() {
 
 	// Tira um screenshot e salva no diretório especificado
 	if _, err := page.Screenshot(playwright.PageScreenshotOptions{
-		Path: playwright.String("data/qrcode.png"), // Salva no diretório data
-		FullPage: playwright.Bool(true),           // Captura a página inteira
+		Path: playwright.String("data/qrcode.png"),
+		FullPage: playwright.Bool(true),
 	}); err != nil {
 		log.Printf("Erro ao tirar screenshot: %v", err)
 	} else {
@@ -144,6 +234,12 @@ func main() {
 	fileInfo.updateLastMod()
 
 	for {
+		if !rateLimiter.canSend() {
+			log.Println("Limite de mensagens atingido. Aguardando próximo período...")
+			time.Sleep(5 * time.Minute)
+			continue
+		}
+
 		if fileInfo.hasChanged() {
 			log.Println("Arquivo mensagens.json foi modificado. Recarregando...")
 			fileInfo.updateLastMod()
@@ -155,6 +251,11 @@ func main() {
 
 // loadDB loads the database from the JSON file.
 func loadDB() (Database, error) {
+	// Verifica a integridade do arquivo
+	if err := secureFileAccess(); err != nil {
+		return Database{}, fmt.Errorf("erro de segurança no acesso ao arquivo: %v", err)
+	}
+
 	var db Database
 	data, err := ioutil.ReadFile(dbFile)
 	if err != nil {
@@ -235,7 +336,15 @@ func enviarMensagensNoHorario(page playwright.Page) {
 }
 
 func enviarViaPlaywright(page playwright.Page, destino, msg string) error {
-	// Pressiona Esc para fechar menus ou pop-ups
+	// Sanitiza as entradas
+	destino = sanitizeInput(destino)
+	msg = sanitizeInput(msg)
+
+	// Adiciona timeout para operações
+	// ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// defer cancel()
+
+	// Use ctx in operations that support context
 	if err := page.Keyboard().Press("Escape"); err != nil {
 		log.Println("Aviso: Não foi possível pressionar Esc:", err)
 	}
@@ -287,7 +396,7 @@ func enviarViaPlaywright(page playwright.Page, destino, msg string) error {
 	if !utf8.ValidString(msg) {
 		msg = string([]rune(msg))
 	}
-	encoder := unicode.UTF8.NewEncoder()
+	encoder := encoding.UTF8.NewEncoder()
 	encodedMsg, _, err := transform.String(encoder, msg)
 	if err != nil {
 		return fmt.Errorf("erro ao codificar a mensagem para Unicode: %v", err)
@@ -407,6 +516,16 @@ func displayQRCodeASCII(filepath string) error {
 	// Print footer
 	fmt.Println("└" + strings.Repeat("─", 102) + "┘")
 	fmt.Println("Aguardando scan do QR Code...")
+
+	return nil
+}
+
+// secureFileAccess verifies and adjusts file permissions for security.
+func secureFileAccess() error {
+	// Verifica e ajusta as permissões do arquivo
+	if err := os.Chmod(dbFile, 0600); err != nil {
+		return fmt.Errorf("erro ao ajustar permissões: %v", err)
+	}
 
 	return nil
 }

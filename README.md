@@ -5,17 +5,18 @@ Esse programa foi escrito em GO para envio de mensagens pelo Whatsapp com uma pr
 Utilize o compose.yaml para executar as funções.
 
 # Instalar
-Usar o docker-compose
+Para instalar, a configuração mínima deverá ser uma máquina com 1Gb de RAM e processador com 2 cores. Abaixo disso, o sistema não consegue vincular o telefone ao Whatsapp Web do sistema.
+
+Uma vez baixado o código do compose.yaml, você poderá usar o seguinte comando:
+
 > docker-compose up -d
-
-
 
 # Fazendo funcionar
 Você deve escanear o QRCode com seu Whatsapp. Você terá 1 minutos para ver o log e escanear.
 
 Para ver o qrcode, você deve executar o seguinte comando.
 
-> docker-compose logs whatsapp -f
+> docker-compose logs -f whatsapp
 
 O log irá mostrar um QRCode em formato texto, conforme mostra a imagem abaixo.
 

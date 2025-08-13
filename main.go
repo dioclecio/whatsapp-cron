@@ -1,52 +1,29 @@
 package main
 
 import (
-	//"context"
-	"encoding/json"
-	"fmt"
-	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
-	"strings"
-	"sync"
+	"path/filepath"
+	"strconv"
 	"time"
-	"unicode"
-	"unicode/utf8"
-	"math/rand"
-	"github.com/playwright-community/playwright-go"
-	encoding "golang.org/x/text/encoding/unicode" // Renamed to avoid conflict
-	"golang.org/x/text/transform"
+
+	"whatsapp-cron/pkg/db"
+	"whatsapp-cron/pkg/events"
+	"whatsapp-cron/pkg/scheduler"
+	"whatsapp-cron/pkg/waha"
+
 	"github.com/makiuchi-d/gozxing"
 	"github.com/makiuchi-d/gozxing/qrcode"
 	"image/png"
 )
 
 const (
-	dbFile = "data/mensagens.json"
+	defaultWahaURL         = "http://localhost:3000"
+	defaultSessionName     = "default"
+	defaultSchedulerTick   = 60
+	defaultRateLimitPerHr = 100
 )
-
-// Mensagem represents a message to be sent.
-type Mensagem struct {
-	ID          int    `json:"id"`
-	Destinatario string `json:"destinatario"`
-	Conteudos   []string `json:"conteudos"`
-	UltimoEnvio string `json:"ultimo_envio"`
-	HorarioEnvio string `json:"horario_envio"`
-	DiaSemana   []time.Weekday `json:"dia_semana"`
-}
-
-// Database represents the JSON database.
-type Database struct {
-	Mensagens []Mensagem `json:"mensagens"`
-}
-
-// fileInfo stores the last modification time of the database file.
-type fileInfo struct {
-	lastMod time.Time
-}
-
-// RateLimit controla o número de mensagens enviadas
-type RateLimit struct {
 	counter    int
 	lastReset  time.Time
 	mutex      sync.Mutex

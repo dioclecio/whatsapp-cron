@@ -2,6 +2,7 @@ main
 data/qrcode.png
 auth.json
 .version
+.env
 
 # Playwright
 node_modules/
